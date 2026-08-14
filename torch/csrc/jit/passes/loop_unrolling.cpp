@@ -9,8 +9,7 @@
 #include <torch/csrc/jit/jit_log.h>
 #include <torch/csrc/jit/passes/dead_code_elimination.h>
 
-namespace torch {
-namespace jit {
+namespace torch::jit {
 
 namespace {
 
@@ -92,7 +91,7 @@ void inlineBody(Node* loop) {
 }
 
 // inserts a copy of body, passing inputs to the inputs of the block
-// it returns the a list of the Values for the output of the block
+// it returns a list of the Values for the output of the block
 std::vector<Value*> insertBlockCopy(
     Graph& graph,
     Block* body,
@@ -129,8 +128,7 @@ void repeatBody(Block* body, size_t times, Block* dest) {
   std::vector<Value*> io = dest->inputs().vec();
   TORCH_INTERNAL_ASSERT(
       !body->inputs().at(0)->hasUses(), "loop counter should be unused");
-  for (const auto i : c10::irange(times)) {
-    (void)i; // Suppress unused variable warning
+  for ([[maybe_unused]] const auto i : c10::irange(times)) {
     io[0] = body->inputs().at(0);
     io = insertBlockCopy(*graph, body, io);
   }
@@ -389,5 +387,4 @@ bool UnrollConstantLoops(std::shared_ptr<Graph>& graph) {
   return changed;
 }
 
-} // namespace jit
-} // namespace torch
+} // namespace torch::jit

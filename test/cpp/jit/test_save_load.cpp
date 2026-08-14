@@ -69,7 +69,7 @@ TEST(SerializationTest, ExtraFilesHookPreference) {
   module->save(oss, extra_files);
   SetExportModuleExtraFilesHook(nullptr);
 
-  std::istringstream iss(oss.str());
+  std::istringstream iss(std::move(oss).str());
   caffe2::serialize::IStreamAdapter adapter{&iss};
   std::unordered_map<std::string, std::string> loaded_extra_files;
   loaded_extra_files["metadata.json"] = "";
@@ -91,7 +91,7 @@ TEST(SerializationTest, ExtraFileHooksNoSecret) {
     ExtraFilesMap extra;
     extra["metadata.json"] = "";
     extra["secret.json"] = "";
-    jit::load(ss, c10::nullopt, extra);
+    jit::load(ss, std::nullopt, extra);
     ASSERT_EQ(extra["metadata.json"], "abc");
     ASSERT_EQ(extra["secret.json"], "");
   }
@@ -114,7 +114,7 @@ TEST(SerializationTest, ExtraFileHooksWithSecret) {
     ExtraFilesMap extra;
     extra["metadata.json"] = "";
     extra["secret.json"] = "";
-    jit::load(ss, c10::nullopt, extra);
+    jit::load(ss, std::nullopt, extra);
     ASSERT_EQ(extra["metadata.json"], "abc");
     ASSERT_EQ(extra["secret.json"], "topsecret");
   }
@@ -347,7 +347,7 @@ TEST(TestSaveLoad, LoadWithoutDebugInfo) { // NOLINT (use =delete in gtest)
       ~~~~~~~~~~~~~~~~~~~~~~~ <--- HERE
       return _0
   )";
-  Module m3 = torch::jit::load(ss, c10::nullopt, false);
+  Module m3 = torch::jit::load(ss, std::nullopt, false);
   ASSERT_THROWS_WITH_MESSAGE(m3.run_method("exception"), error2);
 }
 

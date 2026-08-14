@@ -2,12 +2,11 @@
 
 #include <torch/csrc/lazy/ts_backend/ts_node.h>
 
-namespace torch {
-namespace lazy {
+namespace torch::lazy {
 
 // This IR was copied from code-generated output, but the entire _to_copy
-// operator cannot be trivially code genereated since it is only desirable to
-// capture IR for certain permutaions of _to_copy (e.g. dtype), and for the
+// operator cannot be trivially code generated since it is only desirable to
+// capture IR for certain permutations of _to_copy (e.g. dtype), and for the
 // others it is difficult to even invoke the aten/eager fallback necessitating
 // directly implementing the right to(device) behavior
 class ToCopy : public torch::lazy::TsNode {
@@ -90,7 +89,7 @@ class ToCopy : public torch::lazy::TsNode {
     } else {
       ss << ", memory_format=null";
     }
-    return ss.str();
+    return std::move(ss).str();
   }
 
   torch::lazy::TSOpVector Lower(
@@ -123,5 +122,4 @@ class ToCopy : public torch::lazy::TsNode {
   std::optional<at::MemoryFormat> memory_format;
 };
 
-} // namespace lazy
-} // namespace torch
+} // namespace torch::lazy

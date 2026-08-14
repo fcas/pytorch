@@ -5,8 +5,7 @@
 #include <ATen/TensorUtils.h>
 
 namespace at::native {
-namespace {
-  static C10_UNUSED void multilabel_margin_loss_shape_check(
+  inline void multilabel_margin_loss_shape_check(
     int64_t& nframe,
     int64_t& dim,
     const int64_t& ndims,
@@ -35,7 +34,7 @@ namespace {
     }
   }
 
-  static C10_UNUSED void multi_margin_loss_shape_check(
+  inline void multi_margin_loss_shape_check(
     int64_t& nframe,
     int64_t& dim,
     const int64_t& ndims,
@@ -57,8 +56,10 @@ namespace {
 
     TORCH_CHECK(
         target.dim() <= 1 && target.numel() == nframe,
-        "inconsistent target size, expected ", nframe, " but got ",
-        target.sizes());
+        "multi_margin_loss: target tensor should be 1-D with size equal to "
+        "the number of input samples (batch size). Expected target size [",
+        nframe, "], but got ", target.sizes(),
+        ". Input has shape ", input.sizes(), ".");
     if (weight && weight->defined()) {
       TORCH_CHECK(
           weight->dim() <= 1 && weight->numel() == dim,
@@ -67,6 +68,4 @@ namespace {
     }
 }
 
-
-}  // anonymous namespace
 } // namespace at::native

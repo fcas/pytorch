@@ -4,7 +4,7 @@
 
 #include <ATen/core/ivalue.h>
 #include <ATen/core/jit_type_base.h>
-#include <c10/util/Optional.h>
+#include <optional>
 
 
 namespace torch::jit {
@@ -85,10 +85,9 @@ struct TORCH_API ClassType : public NamedType {
       return true;
     }
     if (auto user_rhs = rhs.castRaw<ClassType>()) {
-      const auto& lhs_name = name().value();
-      const auto& rhs_name = user_rhs->name().value();
-
-      return lhs_name == rhs_name &&
+      const auto& lhs_name = name();
+      const auto& rhs_name = user_rhs->name();
+      return lhs_name.has_value() && lhs_name == rhs_name &&
           this->compilation_unit() == user_rhs->compilation_unit();
     }
     return false;
@@ -101,8 +100,8 @@ struct TORCH_API ClassType : public NamedType {
   std::string repr_str() const override {
     std::stringstream ss;
     ss << str()
-       << " (of Python compilation unit at: " << compilation_unit().get() << ")";
-    return ss.str();
+       << " (of Python compilation unit at: " << compilation_unit().get() << ')';
+    return std::move(ss).str();
   }
 
   const std::vector<torch::jit::Function*>& methods() const;
@@ -149,7 +148,7 @@ struct TORCH_API ClassType : public NamedType {
 
   void checkNotExist(const std::string& name, const std::string& what) const;
 
-  // Attributes are stored in a specific slot at runtime for effiency.
+  // Attributes are stored in a specific slot at runtime for efficiency.
   // When emitting instructions we specify the slot so that attribute access is
   // a constant lookup
   std::optional<size_t> findAttributeSlot(const std::string& name) const {
@@ -160,7 +159,7 @@ struct TORCH_API ClassType : public NamedType {
       }
       slot++;
     }
-    return c10::nullopt;
+    return std::nullopt;
   }
   size_t getAttributeSlot(const std::string& name) const {
     if (auto r = findAttributeSlot(name)) {
@@ -341,10 +340,10 @@ struct TORCH_API ClassType : public NamedType {
   const std::vector<torch::jit::Function*>& getForwardPreHooks() const;
 
   void checkForwardPreHookSchema(
-      int pre_hook_idx,
+      size_t pre_hook_idx,
       const FunctionSchema& pre_hook_schema) const;
   void checkForwardHookSchema(
-      int hook_idx,
+      size_t hook_idx,
       const FunctionSchema& hook_schema) const;
 
   void addMethod(torch::jit::Function* method);
@@ -390,14 +389,15 @@ struct TORCH_API ClassType : public NamedType {
       std::string doc_string = "",
       std::vector<std::string> unresolved_class_attributes = {});
 
-  std::string annotation_str_impl(C10_UNUSED const TypePrinter& printer = nullptr) const override {
-    const auto& n = name().value();
-    return n.qualifiedName();
+  std::string annotation_str_impl(
+      [[maybe_unused]] const TypePrinter& printer = nullptr) const override {
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
+    return name()->qualifiedName();
   }
 
   void addAttribute(ClassAttribute classAttribute);
-  std::string getForwardPreHookErrorMessage(int pre_hook_idx) const;
-  std::string getForwardHookErrorMessage(int hook_idx) const;
+  std::string getForwardPreHookErrorMessage(size_t pre_hook_idx) const;
+  std::string getForwardHookErrorMessage(size_t hook_idx) const;
 
   // Mapping of attribute names -> their type.
   // NOTE: this does not contain methods, which are stored in the module
@@ -412,7 +412,7 @@ struct TORCH_API ClassType : public NamedType {
   // Holds method attributes
   std::weak_ptr<CompilationUnit> compilation_unit_;
 
-  // Holds all atrributes, attribute details are found on ClassAttribute
+  // Holds all attributes, attribute details are found on ClassAttribute
   std::vector<ClassAttribute> attributes_;
   // Construct mirroring attributes_, only around due to the fact that `containedTypes()` method returns an ArrayRef.
   // Never fill this without using the appropriate provideNewClassAttribute method
@@ -432,7 +432,7 @@ struct TORCH_API ClassType : public NamedType {
   bool isModule_ = false;
 
   // Doc string of class.
-  std::string doc_string_ = "";
+  std::string doc_string_;
 
   // For error reporting accesses to class level attributes.
   std::vector<std::string> unresolved_class_attributes_;

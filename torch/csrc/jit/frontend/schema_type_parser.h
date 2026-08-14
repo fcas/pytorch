@@ -6,10 +6,13 @@
 #include <c10/util/FunctionRef.h>
 #include <torch/csrc/jit/frontend/lexer.h>
 
-namespace torch {
-namespace jit {
+namespace torch::jit {
 
 using TypePtr = c10::TypePtr;
+
+TORCH_API void registerOpaqueType(const std::string& type_name);
+TORCH_API void unregisterOpaqueType(const std::string& type_name);
+TORCH_API bool isRegisteredOpaqueType(const std::string& type_name);
 
 struct TORCH_API SchemaTypeParser {
   TypePtr parseBaseType();
@@ -20,8 +23,13 @@ struct TORCH_API SchemaTypeParser {
   std::optional<at::ScalarType> parseTensorDType(const std::string& dtype);
   TypePtr parseRefinedTensor();
 
-  SchemaTypeParser(Lexer& L, bool parse_complete_tensor_types)
-      : complete_tensor_types(parse_complete_tensor_types), L(L) {}
+  SchemaTypeParser(
+      Lexer& L,
+      bool parse_complete_tensor_types,
+      bool allow_typevars)
+      : complete_tensor_types(parse_complete_tensor_types),
+        L(L),
+        allow_typevars_(allow_typevars) {}
 
  private:
   std::optional<bool> tryToParseRequiresGrad();
@@ -35,6 +43,6 @@ struct TORCH_API SchemaTypeParser {
   bool complete_tensor_types;
   Lexer& L;
   size_t next_id = 0;
+  bool allow_typevars_;
 };
-} // namespace jit
-} // namespace torch
+} // namespace torch::jit

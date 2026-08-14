@@ -3,9 +3,9 @@
 #include <cstdint>
 
 #include <ATen/core/ivalue.h>
+#include <c10/util/Exception.h>
 
-namespace ao {
-namespace sparse {
+namespace ao::sparse {
 
 // <Weight, bias, out_features_block_size, in_features_block_size>
 using LinearPackedSerializationType =
@@ -63,13 +63,11 @@ struct LinearPackedParamsBase : public torch::jit::CustomClassHolder {
   virtual std::optional<at::Tensor> bias() = 0;
 
   virtual void set_bias(const std::optional<at::Tensor>& bias) {
-    throw std::runtime_error(
-        "set_bias is not implemented for this packed "
-        "parameter type");
+    TORCH_CHECK(false, "set_bias is not implemented for this packed parameter type");
   }
 
  protected:
   const int64_t out_features_block_size_, in_features_block_size_;
 };
 
-}}  // namespace ao::sparse
+}  // namespace ao::sparse

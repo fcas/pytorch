@@ -8,8 +8,7 @@
 #include <torch/csrc/utils/pybind.h>
 #include <torch/csrc/utils/python_strings.h>
 
-namespace torch {
-namespace autograd {
+namespace torch::autograd {
 
 void PyAnomalyMetadata::store_stack() {
   pybind11::gil_scoped_acquire gil;
@@ -31,20 +30,31 @@ void PyAnomalyMetadata::store_stack() {
 void PyAnomalyMetadata::print_stack(const std::string& current_node_name) {
   pybind11::gil_scoped_acquire gil;
   if (!PyDict_Check(dict())) {
-    throw std::runtime_error("Anomaly metadata is not a python dictionary.");
+    TORCH_CHECK(false, "Anomaly metadata is not a python dictionary.");
   }
-  PyObject* trace_stack = PyDict_GetItemString(dict(), ANOMALY_TRACE_KEY);
-  _print_stack(trace_stack, current_node_name, false);
-  PyObject* pyparent(PyDict_GetItemString(dict(), ANOMALY_PARENT_KEY));
+  PyObject* trace_stack_ptr = nullptr;
+  if (PyDict_GetItemStringRef(dict(), ANOMALY_TRACE_KEY, &trace_stack_ptr) <
+      0) {
+    throw python_error();
+  }
+  THPObjectPtr trace_stack(trace_stack_ptr);
+  _print_stack(trace_stack.get(), current_node_name, false);
+  PyObject* pyparent_ptr = nullptr;
+  if (PyDict_GetItemStringRef(dict(), ANOMALY_PARENT_KEY, &pyparent_ptr) < 0) {
+    throw python_error();
+  }
+  THPObjectPtr pyparent(pyparent_ptr);
 
   // if there is no "parent_" in metadata, then it means this metadata's node
   // is the root and stop printing the traceback
   while (pyparent) {
-    THPObjectPtr parent_metadata(PyObject_GetAttrString(pyparent, "metadata"));
+    THPObjectPtr parent_metadata(
+        PyObject_GetAttrString(pyparent.get(), "metadata"));
     if (!parent_metadata) {
       throw python_error();
     }
-    THPObjectPtr parent_name_pyobj(PyObject_CallMethod(pyparent, "name", ""));
+    THPObjectPtr parent_name_pyobj(
+        PyObject_CallMethod(pyparent.get(), "name", ""));
     if (!parent_name_pyobj) {
       throw python_error();
     }
@@ -53,17 +63,26 @@ void PyAnomalyMetadata::print_stack(const std::string& current_node_name) {
       throw python_error();
     }
     const std::string parent_name(parent_name_char);
-    PyObject* parent_stack =
-        PyDict_GetItemString(parent_metadata.get(), ANOMALY_TRACE_KEY);
-    _print_stack(parent_stack, parent_name, true);
+    PyObject* parent_stack_ptr = nullptr;
+    if (PyDict_GetItemStringRef(
+            parent_metadata.get(), ANOMALY_TRACE_KEY, &parent_stack_ptr) < 0) {
+      throw python_error();
+    }
+    THPObjectPtr parent_stack(parent_stack_ptr);
+    _print_stack(parent_stack.get(), parent_name, true);
     // get the parent of this node, if this node is a root, pyparent is simply
     // null
-    pyparent = PyDict_GetItemString(parent_metadata.get(), ANOMALY_PARENT_KEY);
+    PyObject* next_parent_ptr = nullptr;
+    if (PyDict_GetItemStringRef(
+            parent_metadata.get(), ANOMALY_PARENT_KEY, &next_parent_ptr) < 0) {
+      throw python_error();
+    }
+    pyparent = THPObjectPtr(next_parent_ptr);
   }
 }
 
 void PyAnomalyMetadata::assign_parent(
-    const std::shared_ptr<Node>& parent_node) {
+    const c10::intrusive_ptr<Node>& parent_node) {
   // assign the python object of parent_node in metadata["parent_"]
   // if parent_node is nullptr, then do nothing (it can mean that "parent_" key
   // is not in metadata)
@@ -125,5 +144,4 @@ void _print_stack(
   }
 }
 
-} // namespace autograd
-} // namespace torch
+} // namespace torch::autograd

@@ -16,8 +16,8 @@ inline void check_size_nonnegative(ArrayRef<int64_t> size) {
 
 inline void check_size_nonnegative(ArrayRef<c10::SymInt> size) {
   for (const auto& x : size) {
-    TORCH_CHECK(
-        x.expect_size(__FILE__, __LINE__),
+    TORCH_SYM_CHECK(
+        x.sym_ge(0),
         "Trying to create tensor with negative dimension ",
         x,
         ": ",
@@ -76,7 +76,7 @@ TORCH_API TensorBase empty_cpu(
     IntArrayRef size,
     ScalarType dtype,
     bool pin_memory = false,
-    std::optional<c10::MemoryFormat> memory_format_opt = c10::nullopt);
+    std::optional<c10::MemoryFormat> memory_format_opt = std::nullopt);
 
 TORCH_API TensorBase empty_cpu(
     IntArrayRef size,
@@ -110,7 +110,7 @@ TORCH_API TensorBase empty_strided_cpu(
 TORCH_API TensorBase empty_meta(
     IntArrayRef size,
     ScalarType dtype,
-    std::optional<c10::MemoryFormat> memory_format_opt = c10::nullopt);
+    std::optional<c10::MemoryFormat> memory_format_opt = std::nullopt);
 
 TORCH_API TensorBase empty_meta(
     IntArrayRef size,
@@ -156,8 +156,7 @@ TORCH_API TensorBase empty_strided_symint_meta(
     SymIntArrayRef stride,
     std::optional<ScalarType> dtype_opt,
     std::optional<Layout> layout_opt,
-    std::optional<Device> device_opt,
-    std::optional<bool> pin_memory_opt);
+    std::optional<Device> device_opt);
 
 TORCH_API TensorBase empty_strided_symint_meta(
     SymIntArrayRef size,

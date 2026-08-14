@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <c10/util/ScopeExit.h>
+#include <c10/util/error.h>
 #include <elf.h>
 #include <fcntl.h>
 #include <fmt/format.h>
@@ -17,7 +19,6 @@
 #include <cerrno>
 #include <cstdio>
 #include <cstring>
-#include <iostream>
 
 namespace torch::unwind {
 
@@ -35,31 +36,37 @@ struct Section {
 /// Memory maps a file into the address space read-only, and manages the
 /// lifetime of the mapping. Here are a few use cases:
 /// 1. Used in the loader to read in initial image, and to inspect
-// ELF files for dependencies before callling dlopen.
+// ELF files for dependencies before calling dlopen.
 ///
 /// 2. Used in unity to load the elf file.
 struct MemFile {
   explicit MemFile(const char* filename_)
-      : fd_(open(filename_, O_RDONLY)),
-        mem_(nullptr),
-        n_bytes_(0),
-        name_(filename_) {
+      : fd_(open(filename_, O_RDONLY)), name_(filename_) {
     UNWIND_CHECK(
-        fd_ != -1, "failed to open {}: {}", filename_, strerror(errno));
-    // NOLINTNEXTLINE
-    struct stat s;
-    if (-1 == fstat(fd_, &s)) {
-      close(fd_); // destructors don't run during exceptions
-      UNWIND_CHECK(false, "failed to stat {}: {}", filename_, strerror(errno));
-    }
+        fd_ != -1,
+        "failed to open {}: {}",
+        filename_,
+        c10::utils::str_error(errno));
+    auto fd_guard = c10::make_scope_exit([this]() { close(fd_); });
+
+    struct stat s{};
+    UNWIND_CHECK(
+        -1 != fstat(fd_, &s),
+        "failed to stat {}: {}",
+        filename_,
+        c10::utils::str_error(errno));
     n_bytes_ = s.st_size;
     UNWIND_CHECK(
         n_bytes_ > sizeof(Elf64_Ehdr), "empty shared library: {}", filename_);
     mem_ = (char*)mmap(nullptr, n_bytes_, PROT_READ, MAP_SHARED, fd_, 0);
-    if (MAP_FAILED == mem_) {
-      close(fd_);
-      UNWIND_CHECK(false, "failed to mmap {}: {}", filename_, strerror(errno));
-    }
+    UNWIND_CHECK(
+        MAP_FAILED != mem_,
+        "failed to mmap {}: {}",
+        filename_,
+        c10::utils::str_error(errno));
+    auto mem_guard =
+        c10::make_scope_exit([this]() { munmap((void*)mem_, n_bytes_); });
+
     ehdr_ = (Elf64_Ehdr*)mem_;
 #define ELF_CHECK(cond) UNWIND_CHECK(cond, "not an ELF file: {}", filename_)
     ELF_CHECK(ehdr_->e_ident[EI_MAG0] == ELFMAG0);
@@ -82,10 +89,14 @@ struct MemFile {
         ehdr_->e_shstrndx < ehdr_->e_shnum, "invalid strtab section offset");
     auto& strtab_hdr = shdr_[ehdr_->e_shstrndx];
     strtab_ = getSection(strtab_hdr);
+    mem_guard.release();
+    fd_guard.release();
   }
 
   MemFile(const MemFile&) = delete;
+  MemFile(MemFile&&) = delete;
   MemFile& operator=(const MemFile&) = delete;
+  MemFile& operator=(MemFile&&) = delete;
   [[nodiscard]] const char* data() const {
     return (const char*)mem_;
   }
@@ -100,7 +111,7 @@ struct MemFile {
     if (mem_) {
       munmap((void*)mem_, n_bytes_);
     }
-    if (fd_) {
+    if (fd_ >= 0) {
       close(fd_);
     }
   }
@@ -139,8 +150,8 @@ struct MemFile {
     return (T*)(mem_ + offset);
   }
   int fd_;
-  char* mem_;
-  size_t n_bytes_;
+  char* mem_{nullptr};
+  size_t n_bytes_{0};
   std::string name_;
   Elf64_Ehdr* ehdr_;
   Elf64_Shdr* shdr_;

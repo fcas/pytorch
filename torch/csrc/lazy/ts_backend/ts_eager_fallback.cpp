@@ -12,8 +12,7 @@
 #include <sstream>
 #include <unordered_map>
 
-namespace torch {
-namespace lazy {
+namespace torch::lazy {
 namespace {
 
 std::vector<at::Tensor> _to_eager(
@@ -107,15 +106,15 @@ c10::DispatchKey dispatch_key(c10::DeviceType device_type) {
       return c10::DispatchKey::CUDA;
     }
     default: {
-      AT_ERROR("Unsupported device type: ", device_type);
+      TORCH_CHECK(false, "Unsupported device type: ", device_type);
     }
   }
 }
 
 std::optional<c10::Device> compute_target_device(
     std::vector<at::Tensor>& t_args,
-    std::vector<c10::List<at::Tensor>> tlist_args,
-    std::vector<c10::List<std::optional<at::Tensor>>> opt_tlist_args) {
+    const std::vector<c10::List<at::Tensor>>& tlist_args,
+    const std::vector<c10::List<std::optional<at::Tensor>>>& opt_tlist_args) {
   // Decide what device to move the output tensor(s) to.
   // The current convention is that we use the first tensor arg to pick the
   // device Barring that, we take the first tensor from a TensorList arg.
@@ -131,13 +130,14 @@ std::optional<c10::Device> compute_target_device(
     }
     for (auto& tens_list : opt_tlist_args) {
       for (const auto i : c10::irange(tens_list.size())) {
-        if (tens_list.get(i).has_value()) {
-          return tens_list.get(i)->device();
+        auto const& e = tens_list.get(i);
+        if (e.has_value()) {
+          return e->device();
         }
       }
     }
   }
-  return c10::nullopt;
+  return std::nullopt;
 }
 
 } // namespace
@@ -174,7 +174,7 @@ void ltc_eager_fallback(
   // because this boxed fallback kernel is used by multiple operators,
   // and the macro stamps out a static Counter object with a fixed name
   // at the code location that it was called.
-  if (_eager_fallback_counters.find(name) == _eager_fallback_counters.end()) {
+  if (!_eager_fallback_counters.contains(name)) {
     _eager_fallback_counters[name] = new ::torch::lazy::Counter(name);
   }
   _eager_fallback_counters[name]->AddValue(1);
@@ -214,7 +214,7 @@ void ts_eager_fallback(
   const auto arguments_begin = stack->size() - num_arguments;
 
   std::vector<at::Tensor> tensor_args;
-  std::vector<int> tensor_args_indices;
+  std::vector<size_t> tensor_args_indices;
 
   std::vector<c10::List<at::Tensor>> tensorlist_args;
   std::vector<c10::List<std::optional<at::Tensor>>> opt_tensorlist_args;
@@ -271,7 +271,7 @@ void ts_eager_fallback(
   // the temporary eager output tensor that we created.
   //
   // Note [Eager Fallback Does Not Handle View Operators]
-  // Also note that we are incapable of handling immutable alises properly.
+  // Also note that we are incapable of handling immutable aliases properly.
   // Why?
   // Schemas with an immutable alias'd tensor outputs correspond to view
   // operators. For example, the `view_as` schema from native_functions.yaml:
@@ -340,14 +340,14 @@ void ts_eager_fallback(
             // We should never hit this for a view op,
             // because LazyTensor should provide a lowering for the
             // corresponding view_copy operator. The functionalization pass will
-            // take care of calling the view_copy operator intead of the view.
+            // take care of calling the view_copy operator instead of the view.
             TORCH_CHECK(
                 false,
                 "The operator ",
                 op.schema().operator_name(),
                 " appears to be a view operator, ",
                 "but it has no implementation for the backend \"",
-                dev_str.str(),
+                std::move(dev_str).str(),
                 "\". View operators don't support ",
                 "falling back to run on the eager, since the tensor's "
                 "storage cannot be shared across devices.");
@@ -368,5 +368,4 @@ void ts_eager_fallback(
   }
 }
 
-} // namespace lazy
-} // namespace torch
+} // namespace torch::lazy

@@ -21,14 +21,18 @@ static inline Tensor repeat_interleave_common(
   TORCH_CHECK(
       repeats.dim() == 1, "repeat_interleave only accept 1D vector as repeat");
   TORCH_CHECK(
-      repeats.scalar_type() == at::kLong || repeats.scalar_type() == at::kInt,
-      "repeats has to be Long or Int tensor");
+      repeats.scalar_type() == at::kLong ||
+          repeats.scalar_type() == at::kInt ||
+          repeats.scalar_type() == at::kShort ||
+          repeats.scalar_type() == at::kChar ||
+          repeats.scalar_type() == at::kByte,
+      "repeats has to be Long, Int, Short, Char, or Byte tensor");
   if (repeats.size(0) == 0) {
     return at::empty_like(repeats, LEGACY_CONTIGUOUS_MEMORY_FORMAT);
   }
   Tensor repeats_ = repeats.contiguous();
   Tensor cumsum = repeats.cumsum(0);
-  int64_t total;
+  int64_t total = 0;
   if (output_size.has_value()) {
     total = output_size.value();
   } else {

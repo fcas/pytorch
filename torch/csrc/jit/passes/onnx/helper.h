@@ -3,8 +3,7 @@
 #include <torch/csrc/jit/api/module.h>
 #include <torch/csrc/jit/ir/ir.h>
 
-namespace torch {
-namespace jit {
+namespace torch::jit {
 
 // Utility functions for PyTorch to ONNX conversion.
 
@@ -29,9 +28,6 @@ TORCH_API ValueToParamPairMap
 buildValueToParamsMap(Block* b, const ParamMap& paramsDict);
 TORCH_API void eraseUnusedValuesFromMap(ValueToParamPairMap& valsToParamsMap);
 TORCH_API void eraseUnusedBlockInputs(Block* b);
-TORCH_API void buildParamsMapFromValueToParamsMap(
-    const ValueToParamPairMap& valsToParamsMap,
-    ParamMap& paramsDict);
 
 TORCH_API Node* addNodeToBlock(
     Block* block,
@@ -73,5 +69,4 @@ class ScalarTypeHashFunction {
   }
 };
 
-} // namespace jit
-} // namespace torch
+} // namespace torch::jit

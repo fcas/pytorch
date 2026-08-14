@@ -1,3 +1,4 @@
+# mypy: allow-untyped-defs
 # Owner(s): ["module: typing"]
 
 import doctest
@@ -8,7 +9,14 @@ import unittest
 from pathlib import Path
 
 import torch
-from torch.testing._internal.common_utils import run_tests, set_cwd, TestCase
+from torch.testing._internal.common_utils import (
+    IS_LINUX,
+    IS_S390X,
+    run_tests,
+    set_cwd,
+    TestCase,
+)
+
 
 try:
     import mypy.api
@@ -35,16 +43,27 @@ def get_all_examples():
     """
     blocklist = {
         "_np",
+        "_InputT",
     }
-    allexamples = ""
 
     example_file_lines = [
-        "import torch",
-        "import torch.nn.functional as F",
+        "# mypy: allow-untyped-defs",
+        "",
         "import math",
-        "import numpy",
         "import io",
         "import itertools",
+        "",
+        "from typing import Any, ClassVar, Generic, List, Tuple, Union",
+        "from typing_extensions import Literal, get_origin, TypeAlias",
+        "T: TypeAlias = object",
+        "",
+        "import numpy",
+        "",
+        "import torch",
+        "import torch.nn.functional as F",
+        "",
+        "from typing_extensions import ParamSpec as _ParamSpec",
+        "ParamSpec = _ParamSpec",
         "",
         # for requires_grad_ example
         # NB: We are parsing this file as Python 2, so we must use
@@ -60,7 +79,7 @@ def get_all_examples():
         if docstr and fname not in blocklist:
             e = get_examples_from_docstring(docstr)
             if e:
-                example_file_lines.append(f"\n\ndef example_torch_{fname}():")
+                example_file_lines.append(f"\n\ndef example_torch_{fname}() -> None:")
                 example_file_lines += e
 
     for fname in dir(torch.Tensor):
@@ -69,21 +88,24 @@ def get_all_examples():
         if docstr and fname not in blocklist:
             e = get_examples_from_docstring(docstr)
             if e:
-                example_file_lines.append(f"\n\ndef example_torch_tensor_{fname}():")
+                example_file_lines.append(
+                    f"\n\ndef example_torch_tensor_{fname}() -> None:"
+                )
                 example_file_lines += e
 
     return "\n".join(example_file_lines)
 
 
 class TestTypeHints(TestCase):
+    @unittest.skipIf(IS_LINUX, "https://github.com/pytorch/pytorch/issues/98259")
+    @unittest.skipIf(IS_S390X, "flaky on s390x")
     @unittest.skipIf(not HAVE_MYPY, "need mypy")
     def test_doc_examples(self):
         """
         Run documentation examples through mypy.
         """
         fn = Path(__file__).resolve().parent / "generated_type_hints_smoketest.py"
-        with open(fn, "w") as f:
-            print(get_all_examples(), file=f)
+        fn.write_text(get_all_examples())
 
         # OK, so here's the deal.  mypy treats installed packages
         # and local modules differently: if a package is installed,

@@ -1,8 +1,8 @@
 #include <torch/csrc/jit/runtime/profiling_graph_executor_impl.h>
 
-#include <c10/util/Optional.h>
 #include <torch/csrc/jit/runtime/simple_graph_executor_impl.h>
 #include <mutex>
+#include <optional>
 
 namespace torch::jit {
 
@@ -18,6 +18,22 @@ const ExecutionPlan& SimpleGraphExecutorImpl::getPlanFor(
 
   // IMPORTANT: This is a hot path of calling a torchscript function. Try not to
   // add any code above this.
+  if (execution_plan_) {
+    return *execution_plan_;
+  }
+  auto copy = graph->copy();
+  runNooptPassPipeline(copy);
+  execution_plan_ = ExecutionPlan(copy, function_name_);
+
+  return *execution_plan_;
+}
+
+const ExecutionPlan& SimpleGraphExecutorImpl::getInputIndependentPlan() {
+  std::lock_guard<std::mutex> lock(compile_mutex);
+  return getInputIndependentPlanImpl();
+}
+
+const ExecutionPlan& SimpleGraphExecutorImpl::getInputIndependentPlanImpl() {
   if (execution_plan_) {
     return *execution_plan_;
   }

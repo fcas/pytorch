@@ -299,7 +299,7 @@ c10::intrusive_ptr<ConvPackedParamsBase<kSpatialDim>> PackedConvWeightsQnnp<
       dilation,
       groups,
       transpose,
-      c10::nullopt, /* input_scale */
+      std::nullopt, /* input_scale */
       kernel_dim,
       w_scales,
       std::move(w_zero_points),
@@ -342,6 +342,9 @@ c10::intrusive_ptr<ConvPackedParamsBase<kSpatialDim>> PackedConvWeightsOnednn<
       stride.size() == kSpatialDim,
       "stride should contain ", kSpatialDim, " elements for ",
       kSpatialDim, "D convolution.");
+  TORCH_CHECK(
+      std::all_of(stride.begin(), stride.end(), [](bool s) { return s > 0; }),
+      "quantized::conv_prepack: stride should be positive.");
   TORCH_CHECK(
       padding.size() == kSpatialDim,
       "Specify front/top/left padding only. "
@@ -458,7 +461,7 @@ c10::intrusive_ptr<ConvPackedParamsBase<kSpatialDim>> PackedConvWeightsOnednn<
   packed_weight_p->set_zero_point(wgt_zero_points);
   std::unique_ptr<ideep::tensor> weight_ptr(packed_weight_p);
   // Bias
-  std::optional<ideep::tensor> onednn_bias{c10::nullopt};
+  std::optional<ideep::tensor> onednn_bias{std::nullopt};
   if (bias.has_value()) {
     at::Tensor bias_vec = bias.value();
     TORCH_CHECK(bias_vec.dim() == 1, "bias should be a vector (1D Tensor)");
@@ -516,6 +519,10 @@ at::Tensor _qconv_prepack_onednn(
       dilation.size() == (decltype(dilation.size()))kSpatialDim,
       "dilation should contain ", kSpatialDim, " elements for ",
       kSpatialDim, "D convolution.");
+  TORCH_CHECK(
+      weight.scalar_type() == at::kChar || weight.scalar_type() == at::kFloat8_e4m3fn,
+      "Weight should have dtype int8 or fp8_e4m3fn but got ", weight.scalar_type());
+  bool is_fp8 = weight.scalar_type() == at::kFloat8_e4m3fn;
 
   bool is_1d = (1 == kSpatialDim);
   auto x_dims = input_shape.has_value()?input_shape.value().vec():ideep::dims();
@@ -531,6 +538,16 @@ at::Tensor _qconv_prepack_onednn(
     padding = quant_utils::MakeArgForConv1d(padding, 0);
     dilation = quant_utils::MakeArgForConv1d(dilation, 1);
     kSpatialDim += 1;
+  }
+#ifdef ONEDNN_FP8_QCONV_SUPPORTED
+  if (is_fp8 && !cpuinfo_has_x86_amx_fp16()) {
+#else
+  if (is_fp8) {
+#endif
+    // Fall back when FP8 convolution is not supported by oneDNN:
+    // - For oneDNN versions prior to v3.9, FP8 convolution is unsupported.
+    // - For oneDNN v3.9 and later, FP8 convolution requires AMX_FP16 support.
+    return weight;
   }
   auto w_dims = weight.sizes().vec();
   auto strides = stride.vec();
@@ -578,11 +595,13 @@ at::Tensor _qconv_prepack_onednn(
   ideep::dims dims_iohw, dims_giohw;
   ideep::tag w_tag = ideep::tag::any;
   const bool with_groups = groups > 1;
+  auto w_dnnl_dtype = at::native::get_mkldnn_dtype(weight.scalar_type());
+  auto x_dnnl_dtype = is_fp8 ? dnnl::memory::data_type::f8_e4m3 : dnnl::memory::data_type::u8;
   w_desc = ideep::convolution_forward::expected_weights_desc(
-      w_dims, dnnl::memory::data_type::s8,
+      w_dims, w_dnnl_dtype,
       strides, padding_l, padding_r, dilates, groups,
       dnnl::algorithm::convolution_direct, dnnl::prop_kind::forward_inference,
-      dnnl::memory::data_type::u8, x_dims, op_attr, /*is_channels_last=*/true);
+      x_dnnl_dtype, x_dims, op_attr, /*is_channels_last=*/true);
 
   // Note: Weight in Conv1D will unsqueeze into Conv2D in previous step
   weight_copy = weight.clone(c10::MemoryFormat::Contiguous);
@@ -595,7 +614,7 @@ at::Tensor _qconv_prepack_onednn(
   ideep::dims wei_dims = with_groups ? ideep::utils::group_dims(w_desc.get_dims(), groups)
                                   : w_desc.get_dims();
   ideep::tensor wgt = ideep::tensor(
-      ideep::tensor::desc({wei_dims, dnnl::memory::data_type::s8, w_tag}, groups),
+      ideep::tensor::desc({wei_dims, w_dnnl_dtype, w_tag}, groups),
       weight_copy.data_ptr());
 
   wgt.set_scale(weights_scales); // Scales are needed for feed_from().
@@ -615,8 +634,7 @@ at::Tensor _qconv_prepack_onednn(
 
 #endif // #if AT_MKLDNN_ENABLED()
 
-namespace at {
-namespace native {
+namespace at::native {
 namespace {
 
 template <int kSpatialDim = 2>
@@ -631,8 +649,8 @@ class QConvPackWeightInt8 final {
       int64_t groups) {
     torch::List<int64_t> output_padding;
     output_padding.reserve(kSpatialDim);
-    for (C10_UNUSED const auto idx : c10::irange(kSpatialDim)) {
-      output_padding.push_back((int64_t)0);
+    for ([[maybe_unused]] const auto idx : c10::irange(kSpatialDim)) {
+      output_padding.push_back(0);
     }
     return _run(weight, bias, stride, padding, output_padding, dilation, groups,
                 /*transpose=*/false);
@@ -855,5 +873,4 @@ TORCH_LIBRARY_IMPL(onednn, CPU, m) {
 }
 
 } // namespace
-} // namespace native
-} // namespace at
+} // namespace at::native

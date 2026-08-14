@@ -1,5 +1,4 @@
 #include <c10/util/Exception.h>
-#include <torch/csrc/jit/frontend/ir_emitter.h>
 #include <torch/csrc/jit/ir/ir_views.h>
 #include <torch/csrc/jit/jit_log.h>
 #include <torch/csrc/jit/passes/inliner.h>
@@ -77,7 +76,7 @@ std::unordered_map<const FunctionSchema*, BoundedShapeGraphs>
 // CompilationUnit that holds all these Functions and keeps them alive.
 auto compilation_unit = std::make_shared<CompilationUnit>();
 
-const at::optional<const FunctionSchema*> getInplaceVariant(
+const std::optional<const FunctionSchema*> getInplaceVariant(
     const FunctionSchema& base_schema) {
   auto& inplace_variants =
       getAllOperatorsFor(c10::Symbol::fromQualString(base_schema.name() + "_"));
@@ -102,7 +101,7 @@ const at::optional<const FunctionSchema*> getInplaceVariant(
 
     return schema;
   }
-  return at::nullopt;
+  return std::nullopt;
 }
 
 TypePtr mapTensorToListOfInts(TypePtr type) {
@@ -219,7 +218,7 @@ void checkInputAndOutputTypes(
 
 void transformShapeFunction(
     const FunctionSchema* schema_string,
-    std::shared_ptr<Graph> graph) {
+    const std::shared_ptr<Graph>& graph) {
   Inline(*graph);
 
   // ATEN operators can return multiple unboxed values, this in contrast to
@@ -253,7 +252,7 @@ std::shared_ptr<Graph> genShapeComputeFn(
       *schema_string,
       " with shape compute func: ",
       shape_compute_function_name);
-  if (reused_functions.count(shape_compute_function_name)) {
+  if (reused_functions.contains(shape_compute_function_name)) {
     GRAPH_DEBUG("Registering reused schema");
     graph = reused_functions[shape_compute_function_name];
   } else {
@@ -365,7 +364,7 @@ void loadFunctions() {
         [&](const std::string& name) -> std::shared_ptr<Source> { return src; },
         1);
     compilation_unit->define(
-        c10::nullopt, shape_compute_functions, resolver, nullptr);
+        std::nullopt, shape_compute_functions, resolver, nullptr);
     loadModule(*compilation_unit);
   } catch (...) {
     // Reset the cache and compilation unit so that we don't get weird errors
@@ -391,7 +390,7 @@ std::optional<std::shared_ptr<Graph>> shapeComputeGraphForSchema(
   }
   GRAPH_DEBUG("Could not find schema: ", schema);
 
-  return c10::nullopt;
+  return std::nullopt;
 }
 
 TORCH_API std::optional<BoundedShapeGraphs> boundedGraphsForSchema(
@@ -406,12 +405,12 @@ TORCH_API std::optional<BoundedShapeGraphs> boundedGraphsForSchema(
     return cache_it->second;
   }
 
-  return c10::nullopt;
+  return std::nullopt;
 }
 
 void RegisterShapeComputeGraphForSchema(
     const FunctionSchema& schema,
-    std::shared_ptr<Graph> g) {
+    const std::shared_ptr<Graph>& g) {
   std::lock_guard<std::mutex> guard(lock);
   if (cached_schema_to_graph.empty()) {
     loadFunctions();

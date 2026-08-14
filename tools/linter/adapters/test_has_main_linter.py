@@ -1,4 +1,9 @@
-#!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.10"
+# dependencies = [
+#   "libcst",
+# ]
+# ///
 """
 This lint verifies that every Python test file (file that matches test_*.py or
 *_test.py in the test folder) has a main block which raises an exception or
@@ -6,14 +11,18 @@ calls run_tests to ensure that the test will be run in OSS CI.
 
 Takes ~2 minuters to run without the multiprocessing, probably overkill.
 """
+
+from __future__ import annotations
+
 import argparse
 import json
 import multiprocessing as mp
 from enum import Enum
-from typing import List, NamedTuple, Optional
+from typing import NamedTuple
 
 import libcst as cst
 import libcst.matchers as m
+
 
 LINTER_CODE = "TEST_HAS_MAIN"
 
@@ -62,18 +71,18 @@ class LintSeverity(str, Enum):
 
 
 class LintMessage(NamedTuple):
-    path: Optional[str]
-    line: Optional[int]
-    char: Optional[int]
+    path: str | None
+    line: int | None
+    char: int | None
     code: str
     severity: LintSeverity
     name: str
-    original: Optional[str]
-    replacement: Optional[str]
-    description: Optional[str]
+    original: str | None
+    replacement: str | None
+    description: str | None
 
 
-def check_file(filename: str) -> List[LintMessage]:
+def check_file(filename: str) -> list[LintMessage]:
     lint_messages = []
 
     with open(filename) as f:

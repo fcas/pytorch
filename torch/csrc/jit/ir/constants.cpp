@@ -1,11 +1,7 @@
+#include <c10/util/Exception.h>
 #include <torch/csrc/jit/ir/constants.h>
-
-#include <ATen/core/functional.h>
-#include <torch/csrc/autograd/variable.h>
 #include <torch/csrc/jit/ir/ir.h>
-#include <torch/csrc/jit/runtime/custom_operator.h>
 #include <torch/csrc/jit/runtime/operator.h>
-#include <torch/csrc/jit/runtime/register_ops_utils.h>
 
 namespace torch::jit {
 
@@ -54,8 +50,7 @@ Value* insertConstant(
   if (value) {
     return *value;
   }
-  throw constant_not_supported_error(
-      "Unsupported value kind: " + val.tagKind());
+  TORCH_CHECK(false, "Unsupported value kind: ", val.tagKind());
 }
 
 // IValue -> Constant node
@@ -69,7 +64,7 @@ std::optional<Value*> tryInsertConstant(
     at::Tensor ref = val.toTensor();
     if (!insertableTensor(val.toTensor())) {
       n->destroy();
-      return c10::nullopt;
+      return std::nullopt;
     }
     if (!ref.defined()) {
       n->destroy();
@@ -99,7 +94,7 @@ std::optional<Value*> tryInsertConstant(
       n->output()->setType(val.type());
     } else {
       n->destroy();
-      return c10::nullopt;
+      return std::nullopt;
     }
   } else if (val.isString()) {
     n->s_(attr::value, val.toStringRef());
@@ -107,7 +102,7 @@ std::optional<Value*> tryInsertConstant(
   } else if (val.isDevice()) {
     std::stringstream ss;
     ss << val.toDevice();
-    n->s_(attr::value, ss.str());
+    n->s_(attr::value, std::move(ss).str());
     n->output()->setType(DeviceObjType::get());
   } else if (val.isGenerator()) {
     auto generator = val.toGenerator();
@@ -125,7 +120,7 @@ std::optional<Value*> tryInsertConstant(
       n->output()->setType(val.type());
     } else {
       n->destroy();
-      return c10::nullopt;
+      return std::nullopt;
     };
   } else if (val.isObject()) {
     const auto& ref = val.toObjectRef();
@@ -137,14 +132,14 @@ std::optional<Value*> tryInsertConstant(
       n->output()->setType(val.type());
     } else {
       n->destroy();
-      return c10::nullopt;
+      return std::nullopt;
     }
   } else if ((val.isGenericDict() && insertableIValue(val)) || (val.isEnum())) {
     n->ival_(attr::value, val);
     n->output()->setType(val.type());
   } else {
     n->destroy();
-    return c10::nullopt;
+    return std::nullopt;
   }
   if (loc)
     n->setSourceRange(*loc);
@@ -155,7 +150,7 @@ std::optional<Value*> tryInsertConstant(
 
 std::optional<IValue> toIValue(const Value* v) {
   if (v->node()->kind() != prim::Constant || v->type()->cast<FunctionType>()) {
-    return c10::nullopt;
+    return std::nullopt;
   }
   const Node* node = v->node();
   const TypePtr& type = v->type();
@@ -215,9 +210,7 @@ std::optional<IValue> toIValue(const Value* v) {
     const auto& class_val = node->ival(attr::value);
     return class_val;
   } else {
-    std::stringstream ss;
-    ss << "constant literal not supported for: " << type->str();
-    throw std::runtime_error(ss.str());
+    TORCH_CHECK(false, "constant literal not supported for: ", type->str());
   }
 }
 

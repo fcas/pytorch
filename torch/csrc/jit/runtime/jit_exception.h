@@ -2,8 +2,8 @@
 
 #include <stdexcept>
 
-#include <c10/util/Optional.h>
 #include <torch/csrc/Export.h>
+#include <optional>
 #include <string>
 
 namespace torch::jit {
@@ -11,14 +11,14 @@ namespace torch::jit {
 struct TORCH_API JITException : public std::runtime_error {
   explicit JITException(
       const std::string& msg,
-      std::optional<std::string> python_class_name = c10::nullopt,
-      std::optional<std::string> original_msg = c10::nullopt);
+      std::optional<std::string> python_class_name = std::nullopt,
+      std::optional<std::string> original_msg = std::nullopt);
 
   std::optional<std::string> getPythonClassName() const {
     return python_class_name_;
   }
 
-  // the original msg if this is from a python exception. The interpretor has
+  // the original msg if this is from a python exception. The interpreter has
   // changed the original message by adding "The following operation failed in
   // the TorchScript interpreter." in front of it in the handleError function.
   std::optional<std::string> getOriginalMsg() const {

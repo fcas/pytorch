@@ -65,7 +65,9 @@ inline bool areAnyOptionalTensorSubclassLike(
   if (c10::impl::dispatch_mode_enabled())
     return true;
   return std::any_of(
-      tensors.begin(), tensors.end(), [](const optional<Tensor>& opt_tensor) {
+      tensors.begin(),
+      tensors.end(),
+      [](const std::optional<Tensor>& opt_tensor) {
         return (
             opt_tensor.has_value() && isTensorSubclassLike(opt_tensor.value()));
       });
@@ -76,7 +78,7 @@ inline bool areAnyOptionalTensorSubclassLike(
 // NOTE: This function expects a scalar tensor of boolean dtype.
 // Eg.
 // Non-Composite Compliant Pattern : (t == 0).all().item<bool>()
-// Composite Compliant Patter : is_salar_tensor_true((t == 0).all())
+// Composite Compliant Pattern : is_salar_tensor_true((t == 0).all())
 inline bool is_scalar_tensor_true(const Tensor& t) {
   TORCH_INTERNAL_ASSERT(t.dim() == 0)
   TORCH_INTERNAL_ASSERT(t.scalar_type() == kBool)

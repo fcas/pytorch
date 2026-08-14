@@ -12,11 +12,7 @@
 #include <torch/csrc/profiler/stubs/base.h>
 #include <torch/csrc/profiler/util.h>
 
-namespace torch::autograd {
-
-struct Node;
-
-namespace profiler {
+namespace torch::autograd::profiler {
 
 enum class C10_API_ENUM EventKind : uint16_t {
   Mark,
@@ -100,8 +96,9 @@ struct TORCH_API LegacyEvent {
         return "pop";
       case EventKind::MemoryAlloc:
         return "memory_alloc";
+      default:
+        TORCH_CHECK(false, "unknown event kind");
     }
-    throw std::runtime_error("unknown event kind");
   }
 
   EventKind kind() const {
@@ -121,7 +118,7 @@ struct TORCH_API LegacyEvent {
   }
 
   double cpuElapsedUs(const LegacyEvent& e) const {
-    return static_cast<double>(e.cpu_ns_ - cpu_ns_) / (1000.0);
+    return static_cast<double>(e.cpu_ns_ - cpu_ns_) / 1000.0;
   }
 
   void setCpuUs(int64_t cpu_us) {
@@ -129,7 +126,7 @@ struct TORCH_API LegacyEvent {
   }
 
   double cpuUs() const {
-    return static_cast<double>(cpu_ns_) / (1000.0);
+    return static_cast<double>(cpu_ns_) / 1000.0;
   }
 
   double cudaElapsedUs(const LegacyEvent& e) const;
@@ -332,11 +329,11 @@ struct TORCH_API ProfilerDisableOptions {
 // NOTE: profiler mode is thread local, with automatic propagation
 // across thread boundary (e.g. at::launch tasks)
 TORCH_API void enableProfilerLegacy(
-    const torch::profiler::impl::ProfilerConfig&);
+    const torch::profiler::impl::ProfilerConfig& /*new_config*/);
 using thread_event_lists = std::vector<std::vector<LegacyEvent>>;
 TORCH_API thread_event_lists disableProfilerLegacy(
     std::optional<ProfilerDisableOptions> profilerDisableOptions =
-        c10::nullopt);
+        std::nullopt);
 
 // adds profiledEvents to the current thread local recorded events. Each event
 // will be marked with node ID given by fromNodeId.
@@ -377,9 +374,9 @@ struct TORCH_API TLSLegacyProfilerGuard {
   explicit TLSLegacyProfilerGuard(
       const torch::profiler::impl::ProfilerConfig& cfg,
       std::optional<std::function<void(const thread_event_lists&)>>
-          resultCallback = c10::nullopt,
+          resultCallback = std::nullopt,
       std::optional<ProfilerDisableOptions> profilerDisableOptions =
-          c10::nullopt)
+          std::nullopt)
       : cb_(std::move(resultCallback)),
         profilerDisableOptions_(profilerDisableOptions) {
     enableProfilerLegacy(cfg);
@@ -402,5 +399,4 @@ struct TORCH_API TLSLegacyProfilerGuard {
   const std::optional<ProfilerDisableOptions> profilerDisableOptions_;
 };
 
-} // namespace profiler
-} // namespace torch::autograd
+} // namespace torch::autograd::profiler

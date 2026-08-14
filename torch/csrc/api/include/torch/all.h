@@ -1,7 +1,7 @@
 #pragma once
 
-#if !defined(_MSC_VER) && __cplusplus < 201703L
-#error C++17 or later compatible compiler is required to use PyTorch.
+#if !defined(_MSC_VER) && __cplusplus < 202002L
+#error C++20 or later compatible compiler is required to use PyTorch.
 #endif
 
 #include <torch/autograd.h>
@@ -10,11 +10,11 @@
 #include <torch/enum.h>
 #include <torch/fft.h>
 #include <torch/jit.h>
-#include <torch/linalg.h>
 #include <torch/mps.h>
 #include <torch/nested.h>
 #include <torch/nn.h>
 #include <torch/optim.h>
+#include <torch/print.h>
 #include <torch/serialize.h>
 #include <torch/sparse.h>
 #include <torch/special.h>

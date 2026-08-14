@@ -8,7 +8,7 @@
 #include <ATen/functorch/Macros.h>
 #include <c10/core/DispatchKey.h>
 #include <ATen/core/function_schema.h>
-#include <c10/util/Optional.h>
+#include <optional>
 #include <c10/core/impl/LocalDispatchKeySet.h>
 #include <ATen/functorch/Interpreter.h>
 #include <ATen/functorch/VmapInterpreter.h>
@@ -37,17 +37,18 @@ namespace at::functorch  {
 // how to perform the transform.
 //
 // TODO: we can excise DynamicLayer in favor of Interpreter,
-// But I am going to leave it for now as a compatiblity shim to avoid
+// But I am going to leave it for now as a compatibility shim to avoid
 // needing to refactor a lot of callsites...
 struct TORCH_API DynamicLayer {
   explicit DynamicLayer(
       TransformType transform_type,
       int64_t layerId,
-      optional<c10::SymInt> batchSize = nullopt,
-      optional<RandomnessType> randomness = nullopt,
-      optional<bool> prev_grad_mode = nullopt,
-      optional<bool> pre_fwd_grad_mode = nullopt,
-      optional<bool> functionalize_add_back_views = nullopt);
+      std::optional<c10::SymInt> batchSize = std::nullopt,
+      std::optional<RandomnessType> randomness = std::nullopt,
+      std::optional<bool> prev_grad_mode = std::nullopt,
+      std::optional<bool> pre_fwd_grad_mode = std::nullopt,
+      std::optional<bool> functionalize_add_back_views = std::nullopt,
+      std::optional<bool> prev_inference_mode = std::nullopt);
 
   TransformType key() const;
   int64_t layerId() const;
@@ -65,11 +66,12 @@ struct TORCH_API DynamicLayer {
 
 TORCH_API int64_t initAndPushDynamicLayer(
     TransformType transform_type,
-    optional<c10::SymInt> batch_size = nullopt,
-    optional<RandomnessType> randomness = nullopt,
-    optional<bool> prev_grad_mode = nullopt,
-    optional<bool> prev_fwd_grad_mode = nullopt,
-    optional<bool> functionalize_add_back_views = nullopt);
+    std::optional<c10::SymInt> batch_size = std::nullopt,
+    std::optional<RandomnessType> randomness = std::nullopt,
+    std::optional<bool> prev_grad_mode = std::nullopt,
+    std::optional<bool> prev_fwd_grad_mode = std::nullopt,
+    std::optional<bool> functionalize_add_back_views = std::nullopt,
+    std::optional<bool> prev_inference_mode = std::nullopt);
 TORCH_API DynamicLayer popDynamicLayerAndDeleteMetadata();
 TORCH_API std::optional<DynamicLayer> maybeCurrentDynamicLayer();
 TORCH_API const std::vector<DynamicLayer>& getDynamicLayerStack();

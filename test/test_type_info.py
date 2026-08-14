@@ -1,6 +1,8 @@
+# mypy: allow-untyped-defs
 # Owner(s): ["module: typing"]
 
 from torch.testing._internal.common_utils import (
+    HardwareClassification,
     load_tests,
     run_tests,
     set_default_dtype,
@@ -8,20 +10,24 @@ from torch.testing._internal.common_utils import (
     TestCase,
 )
 
+
 # load_tests from common_utils is used to automatically filter tests for
 # sharding on sandcastle. This line silences flake warnings
-load_tests = load_tests
+load_tests = load_tests  # noqa: PLW0127
 
 import sys
 import unittest
 
 import torch
 
+
 if TEST_NUMPY:
     import numpy as np
 
 
 class TestDTypeInfo(TestCase):
+    hw_classification = HardwareClassification.GENERIC
+
     def test_invalid_input(self):
         for dtype in [
             torch.float16,
@@ -122,6 +128,7 @@ class TestDTypeInfo(TestCase):
         # Regression test for https://github.com/pytorch/pytorch/issues/124868
         # If reference count is leaked this would be a set of 10 elements
         ref_cnt = {sys.getrefcount(torch.float32.to_complex()) for _ in range(10)}
+
         self.assertLess(len(ref_cnt), 3)
 
         self.assertEqual(torch.float64.to_complex(), torch.complex128)
@@ -132,6 +139,7 @@ class TestDTypeInfo(TestCase):
         # Regression test for https://github.com/pytorch/pytorch/issues/124868
         # If reference count is leaked this would be a set of 10 elements
         ref_cnt = {sys.getrefcount(torch.cfloat.to_real()) for _ in range(10)}
+
         self.assertLess(len(ref_cnt), 3)
 
         self.assertEqual(torch.complex128.to_real(), torch.double)

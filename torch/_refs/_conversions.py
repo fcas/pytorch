@@ -1,12 +1,13 @@
+# mypy: allow-untyped-defs
 import torch
 import torch._prims_common as utils
 
 # Utilities should come BEFORE this import
 from torch._decomp import register_decomposition
-
 from torch._prims_common import TensorLikeType
 from torch._prims_common.wrappers import out_wrapper
 from torch._refs import _broadcast_shapes
+
 
 # Data conversion references.
 #
@@ -79,7 +80,7 @@ short = _make_conversion_method("short", torch.short)
 @out_wrapper(exact_dtype=True)
 def complex(real: TensorLikeType, imag: TensorLikeType) -> TensorLikeType:
     allowed_dtypes = (torch.float32, torch.float64, torch.float16)
-    torch._check(
+    torch._check_not_implemented(
         real.dtype in allowed_dtypes and imag.dtype in allowed_dtypes,
         lambda: (
             f"Expected both inputs to be Half, Float or Double tensors but got "

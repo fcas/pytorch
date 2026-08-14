@@ -14,8 +14,7 @@
 
 #include <c10/util/irange.h>
 
-namespace torch {
-namespace autograd {
+namespace torch::autograd {
 
 // NB: This code duplicates existing logic at torch/autograd/__init__.py and
 // torch._C._EngineBase.run_backward in torch/csrc/autograd/python_engine.cpp
@@ -131,7 +130,7 @@ static variable_list run_backward(
           " of the input tensors does not require grad");
       if (!grad_fn) {
         // See NOTE [ Autograd Unreachable Input ] for details
-        output_edges.emplace_back(std::make_shared<Identity>(), 0);
+        output_edges.emplace_back(c10::make_intrusive<Identity>(), 0);
       } else {
         output_edges.emplace_back(grad_fn, output_nr);
       }
@@ -215,5 +214,4 @@ void exit_dual_level(uint64_t level) {
 
 } // namespace forward_ad
 
-} // namespace autograd
-} // namespace torch
+} // namespace torch::autograd

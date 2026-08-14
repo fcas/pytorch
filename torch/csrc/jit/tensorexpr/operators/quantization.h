@@ -2,9 +2,7 @@
 
 #include <torch/csrc/jit/tensorexpr/kernel.h>
 
-namespace torch {
-namespace jit {
-namespace tensorexpr {
+namespace torch::jit::tensorexpr {
 
 TORCH_API ExprHandle quantizePerTensorQParamFromArg(ArgValue arg);
 
@@ -38,13 +36,6 @@ TORCH_API Tensor computeQuantizedConv1d(
     at::Device device);
 
 TORCH_API Tensor computeQuantizedConv2dPrepack(
-    const std::vector<ArgValue>& inputs,
-    const std::vector<ExprHandle>& outputShape,
-    const std::vector<ExprHandle>& outputStrides,
-    const std::optional<ScalarType>& outputType,
-    at::Device device);
-
-TORCH_API Tensor computeQuantizedConv1d(
     const std::vector<ArgValue>& inputs,
     const std::vector<ExprHandle>& outputShape,
     const std::vector<ExprHandle>& outputStrides,
@@ -154,7 +145,5 @@ TORCH_API Tensor computeQuantizedSigmoidExternalCall(
     const std::vector<ExprHandle>& outputShape,
     const std::vector<ExprHandle>& outputStrides,
     const std::optional<ScalarType>& outputType,
-    at::Device);
-} // namespace tensorexpr
-} // namespace jit
-} // namespace torch
+    at::Device /*unused*/);
+} // namespace torch::jit::tensorexpr

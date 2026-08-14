@@ -1,9 +1,7 @@
 #include <torch/csrc/jit/passes/onnx.h>
 
-#include <ATen/core/functional.h>
 #include <c10/util/Exception.h>
 #include <c10/util/irange.h>
-#include <torch/csrc/autograd/function.h>
 #include <torch/csrc/autograd/symbolic.h>
 #include <torch/csrc/jit/ir/constants.h>
 #include <torch/csrc/jit/jit_log.h>
@@ -13,13 +11,11 @@
 #include <torch/csrc/jit/passes/onnx/onnx_log.h>
 #include <torch/csrc/jit/passes/onnx/shape_type_inference.h>
 #include <torch/csrc/jit/python/python_ir.h>
-#include <torch/csrc/utils/pybind.h>
 #include <sstream>
-#include <unordered_set>
-namespace torch {
-namespace jit {
 
-void removePrintOps(Block* block) {
+namespace torch::jit {
+
+static void removePrintOps(Block* block) {
   for (auto it = block->nodes().begin(), end = block->nodes().end(); it != end;
        ++it) {
     for (auto b : it->blocks()) {
@@ -47,7 +43,7 @@ void RemovePrintOps(std::shared_ptr<Graph>& graph) {
   GRAPH_DUMP("After RemovePrintOps: ", graph);
 }
 
-void checkONNXCompatibility(const c10::FunctionSchema& schema) {
+static void checkONNXCompatibility(const c10::FunctionSchema& schema) {
   // in ONNX, all inputs are tensors, no support for tensor list
   // so at most one input tensor list is supported
   bool has_tensor_list = false;
@@ -75,7 +71,7 @@ void checkONNXCompatibility(const c10::FunctionSchema& schema) {
   }
 }
 
-void preprocessCaffe2Ops(Block* block) {
+static void preprocessCaffe2Ops(Block* block) {
   for (auto it = block->nodes().begin(), end = block->nodes().end(); it != end;
        ++it) {
     for (auto b : it->blocks()) {
@@ -165,11 +161,10 @@ void PreprocessCaffe2Ops(std::shared_ptr<Graph>& graph) {
 std::shared_ptr<Graph> ToONNX(
     std::shared_ptr<Graph>& graph,
     ::torch::onnx::OperatorExportTypes operator_export_type) {
-  auto constant_value_map = ConstantValueMap::getInstance();
   ConstantValueMap::ClearMaps();
   auto new_graph = std::make_shared<Graph>(graph->current_scope());
   py::dict env;
-  // Kept identical to values in env. Used for constant-time existance check.
+  // Kept identical to values in env. Used for constant-time existence check.
   py::set values_in_env;
   try {
     BlockToONNX(
@@ -178,7 +173,7 @@ std::shared_ptr<Graph> ToONNX(
         operator_export_type,
         env,
         values_in_env);
-  } catch (std::runtime_error& ex) {
+  } catch (std::runtime_error&) {
     ONNX_LOG(
         "ONNX graph being constructed during exception:\n",
         new_graph->toString());
@@ -248,7 +243,7 @@ py::dict BlockToONNX(
   return py::dict();
 }
 
-bool ConstantFoldCondition(torch::jit::Value* output) {
+static bool ConstantFoldCondition(torch::jit::Value* output) {
   auto fold_condition = output->node()->kind() != c10::onnx::Constant &&
       ConstantValueMap::HasValue(output->debugName());
   auto reliable_value =
@@ -262,10 +257,12 @@ void NodeToONNX(
     ::torch::onnx::OperatorExportTypes operator_export_type,
     py::dict& env,
     py::set& values_in_env) {
-  py::object onnx = py::module::import("torch.onnx");
-  py::object onnx_globals = py::module::import("torch.onnx._globals");
-  py::object onnx_registration =
-      py::module::import("torch.onnx._internal.registration");
+  py::object onnx_utils =
+      py::module::import("torch.onnx._internal.torchscript_exporter.utils");
+  py::object onnx_globals =
+      py::module::import("torch.onnx._internal.torchscript_exporter._globals");
+  py::object onnx_registration = py::module::import(
+      "torch.onnx._internal.torchscript_exporter.registration");
 
   // Setup all the lambda helper functions.
 
@@ -292,8 +289,8 @@ void NodeToONNX(
       std::ostringstream ss;
       ss << "symbolic for " << op_name
          << " produced an incorrect number of outputs (expected ";
-      ss << num_old_outputs << ", but got " << outputs.size() << ")";
-      throw std::runtime_error(ss.str());
+      ss << num_old_outputs << ", but got " << outputs.size() << ')';
+      throw std::runtime_error(std::move(ss).str());
     }
     // For const node, it does not need params_dict info, so set it to {}.
     const ParamMap empty_params_dict = {};
@@ -310,14 +307,25 @@ void NodeToONNX(
         if (old->hasDebugName() && !exist_in_env) {
           auto old_name = outputs[i]->debugName();
           auto new_name = old->debugNameBase();
-          auto debug_names = new_block->owningGraph()->debugNames();
-          auto exist_name = debug_names.find(new_name);
+          Value* found_value = nullptr;
+          bool exists = false;
+          // In this scope, we fetch debug_names as a const reference and then
+          // construct an iterator exist_name based on it. This iterator will
+          // be corrupted if the underlying map of debug_names changes. This
+          // will happen as a side-effect of setDebugName. For these reasons,
+          // we make an explicit scope for exist_name and make sure that
+          // setDebugName is never called with this scope.
+          {
+            const auto& debug_names = new_block->owningGraph()->debugNames();
+            auto exist_name = debug_names.find(new_name);
+            exists = exist_name != debug_names.end();
+            if (exists) {
+              found_value = exist_name->second;
+            }
+          }
           outputs[i]->setDebugName(new_name);
-          if (exist_name != debug_names.end()) {
-            // setDebugName changes name of existing value with same name.
-            // Set again to revert the changes, but update name for new value
-            // with suffix.
-            exist_name->second->setDebugName(new_name);
+          if (exists) {
+            found_value->setDebugName(new_name);
           }
           ConstantValueMap::UpdateValueName(old_name, outputs[i]->debugName());
         }
@@ -382,7 +390,7 @@ void NodeToONNX(
           ss << " (indicating conversion for that particular output is not supported), ";
           ss << "but the network uses this output later";
           // TODO: Say what actually used it
-          throw std::runtime_error(ss.str());
+          throw std::runtime_error(std::move(ss).str());
         }
       }
     }
@@ -423,7 +431,7 @@ void NodeToONNX(
   auto processSymbolicOutput = [&](const std::string& op_name,
                                    Node* n,
                                    const py::object& raw_output) {
-    if (raw_output.ptr() == Py_None) {
+    if (Py_IsNone(raw_output.ptr())) {
       cloneNode(n);
       return;
     }
@@ -435,12 +443,13 @@ void NodeToONNX(
       } else {
         outputs = py::cast<std::vector<Value*>>(raw_output);
       }
-    } catch (const std::exception& ex) {
+    } catch (const std::exception&) {
       std::ostringstream ss;
       ss << "Error casting results of symbolic for " << op_name
          << ": expected to return list of op nodes, instead received type ''"
-         << py::str(raw_output.get_type()) << "': " << py::str(raw_output);
-      throw std::runtime_error(ss.str());
+         << py::str(py::type::handle_of(raw_output))
+         << "': " << py::str(raw_output);
+      throw std::runtime_error(std::move(ss).str());
     }
 
     setOutputs(op_name, n, outputs);
@@ -464,7 +473,7 @@ void NodeToONNX(
     // IMPORTANT: NEVER pass raw pointer of smart pointer managed objects to
     // Python. Check #87343 for details.
     py::list new_nodes = py::list();
-    py::object raw_output = onnx.attr("_run_symbolic_function")(
+    py::object raw_output = onnx_utils.attr("_run_symbolic_function")(
         g->shared_from_this(),
         new_block,
         n,
@@ -580,7 +589,7 @@ void NodeToONNX(
 
       // IMPORTANT: NEVER pass raw pointer of smart pointer managed objects to
       // Python. Check #87343 for details.
-      py::object raw_output = onnx.attr("_run_symbolic_method")(
+      py::object raw_output = onnx_utils.attr("_run_symbolic_method")(
           new_block->owningGraph()->shared_from_this(),
           op->name(),
           pyobj.attr("symbolic"),
@@ -595,7 +604,7 @@ void NodeToONNX(
       // IMPORTANT: NEVER pass raw pointer of smart pointer managed objects to
       // Python. Check #87343 for details.
       py::list new_nodes = py::list();
-      py::object raw_output = onnx.attr("_run_symbolic_function")(
+      py::object raw_output = onnx_utils.attr("_run_symbolic_function")(
           new_block->owningGraph()->shared_from_this(),
           new_block,
           n,
@@ -620,5 +629,4 @@ void NodeToONNX(
   }
 }
 
-} // namespace jit
-} // namespace torch
+} // namespace torch::jit

@@ -29,8 +29,7 @@
 #endif
 #endif
 
-namespace torch {
-namespace autograd {
+namespace torch::autograd {
 enum class can_mutate_inplace_result {
   success,
   non_default_backward_view,
@@ -94,7 +93,8 @@ inline void check_inplace(at::ITensorListRef tensors, bool requires_grad) {
 }
 
 inline void throw_error_out_requires_grad(const char* name) {
-  AT_ERROR(
+  TORCH_CHECK(
+      false,
       name,
       "(): functions with out=... arguments don't support automatic differentiation, "
       "but one of the arguments requires grad.");
@@ -104,7 +104,7 @@ inline void throw_error_for_complex_autograd(
     const at::Tensor& tensor,
     const char* name) {
   if (tensor.requires_grad()) {
-    TORCH_CHECK(
+    TORCH_CHECK_NOT_IMPLEMENTED(
         !tensor.is_complex(),
         name,
         " does not support automatic differentiation for outputs with complex dtype.");
@@ -133,26 +133,34 @@ inline void throw_error_for_complex_autograd(
 
 // TODO: Blegh, bare references
 
-inline void rebase_history(const Variable& var, std::shared_ptr<Node> grad_fn) {
+// Both overloads return the node that was actually attached as the new
+// history (the CopySlices node when rebasing through a view), so the caller
+// can fire node creation hooks on the composed node once it is fully set up.
+inline c10::intrusive_ptr<Node> rebase_history(
+    const Variable& var,
+    c10::intrusive_ptr<Node> grad_fn) {
   if (grad_fn && var.defined()) {
     grad_fn->add_input_metadata(var);
-    impl::rebase_history(var, {std::move(grad_fn), 0});
+    return impl::rebase_history(var, {std::move(grad_fn), 0});
   }
+  return grad_fn;
 }
 
-inline void rebase_history(
+inline c10::intrusive_ptr<Node> rebase_history(
     const std::vector<Variable>& vars,
-    const std::shared_ptr<Node>& grad_fn) {
+    const c10::intrusive_ptr<Node>& grad_fn) {
+  auto attached_fn = grad_fn;
   if (grad_fn) {
     for (auto& var : vars) {
       if (var.defined()) {
         auto output_nr = grad_fn->add_input_metadata(var);
-        impl::rebase_history(var, {grad_fn, output_nr});
+        attached_fn = impl::rebase_history(var, {grad_fn, output_nr});
       } else {
         grad_fn->add_input_metadata(Node::undefined_input());
       }
     }
   }
+  return attached_fn;
 }
 
 inline void increment_version(const at::Tensor& t) {
@@ -217,7 +225,7 @@ inline at::Tensor as_view(
           tensor,
           diff_view_meta->get_backward_view().chain(
               base, tensor, std::move(view_func), std::move(rev_view_func)),
-          c10::nullopt,
+          std::nullopt,
           /*shared_view_info*/ true,
           creation_meta,
           allow_tensor_metadata_change);
@@ -225,7 +233,7 @@ inline at::Tensor as_view(
       return make_variable_differentiable_view(
           tensor,
           ViewInfo(base, std::move(view_func), std::move(rev_view_func)),
-          c10::nullopt,
+          std::nullopt,
           /*shared_view_info*/ true,
           creation_meta,
           allow_tensor_metadata_change);
@@ -398,7 +406,7 @@ namespace {
 // call in this functor so it can be passed to c10::BoxedKernel::makeFromFunctor
 class WrapperFunctor final : public c10::OperatorKernel {
  public:
-  WrapperFunctor(JitDecompInterface* impl) : impl_(impl){};
+  WrapperFunctor(JitDecompInterface* impl) : impl_(impl) {}
 
   void operator()(
       const c10::OperatorHandle& op,
@@ -413,7 +421,7 @@ class WrapperFunctor final : public c10::OperatorKernel {
 
 template <class Return, class... Args>
 Return run_jit_decomposition_with_args_for_jvp(
-    c10::string_view name,
+    std::string_view name,
     const c10::OperatorHandle& opHandle,
     c10::DispatchKeySet dispatchKeySet,
     Args&&... args) {
@@ -438,5 +446,4 @@ Return run_jit_decomposition_with_args_for_jvp(
 
 } // namespace impl
 
-} // namespace autograd
-} // namespace torch
+} // namespace torch::autograd

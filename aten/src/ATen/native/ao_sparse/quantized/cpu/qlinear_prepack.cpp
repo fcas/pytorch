@@ -18,10 +18,9 @@
 
 #include <algorithm>
 
-namespace ao {
-namespace sparse {
+namespace ao::sparse {
 
-int register_linear_params();
+
 
 #ifdef USE_FBGEMM
 namespace {
@@ -98,8 +97,8 @@ c10::intrusive_ptr<LinearPackedParamsBase> PackedLinearWeight::
     }
   }
 
-  int8_t* weight_ptr_int8 =
-      reinterpret_cast<int8_t*>(weight_contig.data_ptr<c10::qint8>());
+  const int8_t* weight_ptr_int8 =
+      reinterpret_cast<const int8_t*>(weight_contig.const_data_ptr<c10::qint8>());
 
   std::vector<int32_t> col_offsets(N);
   calc_col_offsets_transpose(
@@ -147,7 +146,6 @@ c10::intrusive_ptr<LinearPackedParamsBase> PackedLinearWeightQnnp::
       weight, bias, out_features_block_size, in_features_block_size);
 }
 
-// NOLINTNEXTLINE(cppcoreguidelines-pro-type-member-init)
 PackedLinearWeightQnnp::PackedLinearWeightQnnp(
     const at::Tensor& weight,
     const std::optional<at::Tensor>& bias,
@@ -246,4 +244,4 @@ TORCH_LIBRARY_IMPL(sparse, QuantizedCPU, m) {
       TORCH_FN(QLinearPackWeightInt8::run));
 }
 }  // namespace
-}}  // namespace ao::sparse
+}  // namespace ao::sparse

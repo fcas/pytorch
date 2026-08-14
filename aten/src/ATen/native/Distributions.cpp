@@ -4,7 +4,7 @@
 #include <ATen/TensorIterator.h>
 #include <ATen/TensorOperators.h>
 #include <c10/util/Exception.h>
-#include <c10/util/Optional.h>
+#include <optional>
 
 #include <ATen/CPUGeneratorImpl.h>
 #include <ATen/core/DistributionsHelper.h>
@@ -12,7 +12,6 @@
 #include <ATen/native/DispatchStub.h>
 #include <ATen/native/UnaryOps.h>
 #include <ATen/native/DistributionTemplates.h>
-#include <ATen/NamedTensorUtils.h>
 #include <ATen/native/cpu/Loops.h>
 
 #ifndef AT_PER_OPERATOR_HEADERS
@@ -23,6 +22,7 @@
 #include <ATen/ops/_sample_dirichlet_native.h>
 #include <ATen/ops/_standard_gamma_grad_native.h>
 #include <ATen/ops/_standard_gamma_native.h>
+#include <ATen/ops/_assert_async.h>
 #include <ATen/ops/argmax.h>
 #include <ATen/ops/bernoulli_native.h>
 #include <ATen/ops/binomial_native.h>
@@ -42,13 +42,7 @@
 #include <ATen/ops/zeros.h>
 #endif
 
-#include <functional>
-#include <type_traits>
 #include <utility>
-// NOLINTNEXTLINE(modernize-deprecated-headers)
-#include <assert.h>
-// NOLINTNEXTLINE(modernize-deprecated-headers)
-#include <float.h>
 
 namespace {
 /*
@@ -88,47 +82,38 @@ int64_t sample_poisson(double lambda, at::CPUGeneratorImpl* generator) {
   at::uniform_real_distribution<double> standard_uniform(0.0, 1.0);
   if (lambda >= 10) {
     // transformed rejection method, (Hoermann, 1993)
-    // NOLINTNEXTLINE(cppcoreguidelines-init-variables)
-    int64_t k;
-    // NOLINTNEXTLINE(cppcoreguidelines-init-variables)
-    double U, V, a, b, invalpha, vr, us;
 
     double slam = std::sqrt(lambda);
     double loglam = std::log(lambda);
-    b = 0.931 + 2.53 * slam;
-    a = -0.059 + 0.02483 * b;
-    invalpha = 1.1239 + 1.1328 / (b - 3.4);
-    vr = 0.9277 - 3.6224 / (b - 2);
+    double b = 0.931 + 2.53 * slam;
+    double a = -0.059 + 0.02483 * b;
+    double invalpha = 1.1239 + 1.1328 / (b - 3.4);
+    double vr = 0.9277 - 3.6224 / (b - 2);
 
     while (true) {
-      U = standard_uniform(generator) - 0.5;
-      V = standard_uniform(generator);
-      us = 0.5 - std::fabs(U);
-      k = (int64_t)std::floor((2 * a / us + b) * U + lambda + 0.43);
+      double U = standard_uniform(generator) - 0.5;
+      double V = standard_uniform(generator);
+      double us = 0.5 - std::fabs(U);
+      auto k = std::floor((2 * a / us + b) * U + lambda + 0.43);
       if ((us >= 0.07) && (V <= vr)) {
-        return k;
+        return static_cast<int64_t>(k);
       }
       if ((k < 0) || ((us < 0.013) && (V > us))) {
         continue;
       }
       if ((std::log(V) + std::log(invalpha) - std::log(a / (us * us) + b)) <=
-          (-lambda + k * loglam - std::lgamma((double)k + 1))) {
-        return k;
+          (-lambda + k * loglam - std::lgamma(k + 1))) {
+        return static_cast<int64_t>(k);
       }
     }
   } else if (lambda == 0) {
     return 0;
   } else {
-    // NOLINTNEXTLINE(cppcoreguidelines-init-variables)
-    int64_t X;
-    // NOLINTNEXTLINE(cppcoreguidelines-init-variables)
-    double prod, U, enlam;
-
-    enlam = std::exp(-lambda);
-    X = 0;
-    prod = 1.0;
+    auto enlam = std::exp(-lambda);
+    int64_t X = 0;
+    auto prod = 1.0;
     while (true) {
-      U = standard_uniform(generator);
+      auto U = standard_uniform(generator);
       prod *= U;
       if (prod > enlam) {
         X += 1;
@@ -377,7 +362,7 @@ struct RandomFromToStub {
   }
 };
 
-Tensor& random_(Tensor& self, int64_t from, optional<int64_t> to, std::optional<Generator> gen) {
+Tensor& random_(Tensor& self, int64_t from, std::optional<int64_t> to, std::optional<Generator> gen) {
   return at::native::templates::random_from_to_impl<RandomFromToStub, Generator>(self, from, to, std::move(gen));
 }
 
@@ -390,7 +375,7 @@ Tensor& random_meta_(Tensor& self, std::optional<Generator> gen) {
   return self;
 }
 
-Tensor& random_meta_(Tensor& self, int64_t from, optional<int64_t> to, std::optional<Generator> gen) {
+Tensor& random_meta_(Tensor& self, int64_t from, std::optional<int64_t> to, std::optional<Generator> gen) {
   // No error checking yay
   return self;
 }
@@ -406,8 +391,8 @@ Tensor _standard_gamma_grad_cpu(const Tensor& self, const Tensor& output) {
   Tensor ret = at::empty(self.sizes(), self.options());
   auto iter = TensorIteratorConfig()
     .add_output(ret)
-    .add_input(self)
-    .add_input(output)
+    .add_const_input(self)
+    .add_const_input(output)
     .build();
   AT_DISPATCH_FLOATING_TYPES(self.scalar_type(), "_standard_gamma_grad_cpu", [&] {
     cpu_serial_kernel(iter, [](scalar_t self_val, scalar_t output_val) -> scalar_t{
@@ -421,9 +406,9 @@ Tensor _dirichlet_grad_cpu(const Tensor& x, const Tensor& alpha, const Tensor& t
   Tensor ret = at::empty(x.sizes(), x.options());
   auto iter = TensorIteratorConfig()
     .add_output(ret)
-    .add_input(x)
-    .add_input(alpha)
-    .add_input(total)
+    .add_const_input(x)
+    .add_const_input(alpha)
+    .add_const_input(total)
     .build();
   AT_DISPATCH_FLOATING_TYPES(x.scalar_type(), "_dirichlet_grad_cpu", [&] {
     cpu_serial_kernel(iter, [](scalar_t x_val, scalar_t alpha_val, scalar_t total_val) -> scalar_t{
@@ -438,11 +423,19 @@ Tensor _dirichlet_grad_cpu(const Tensor& x, const Tensor& alpha, const Tensor& t
  */
 
 Tensor _s_binomial_cpu(const Tensor& count, const Tensor& prob, std::optional<Generator> gen) {
+  TORCH_CHECK_VALUE(
+      at::isFloatingType(count.scalar_type()),
+      "binomial only supports floating-point dtypes for count, got: ",
+      count.scalar_type());
+  TORCH_CHECK_VALUE(
+      at::isFloatingType(prob.scalar_type()),
+      "binomial only supports floating-point dtypes for prob, got: ",
+      prob.scalar_type());
   Tensor ret = at::zeros(count.sizes(), count.options());
   auto iter = TensorIteratorConfig()
     .add_output(ret)
-    .add_input(count)
-    .add_input(prob)
+    .add_const_input(count)
+    .add_const_input(prob)
     .build();
   AT_DISPATCH_FLOATING_TYPES(ret.scalar_type(), "binomial_cpu", [&] {
     CPUGeneratorImpl* generator = get_generator_or_default<CPUGeneratorImpl>(gen, detail::getDefaultCPUGenerator());
@@ -466,7 +459,7 @@ Tensor _s_poisson_cpu(const Tensor& lambda, std::optional<Generator> gen) {
   Tensor ret = at::zeros(lambda.sizes(), lambda.options());
   auto iter = TensorIteratorConfig()
     .add_output(ret)
-    .add_input(lambda)
+    .add_const_input(lambda)
     .build();
   AT_DISPATCH_FLOATING_TYPES_AND2(at::ScalarType::BFloat16, at::ScalarType::Half, ret.scalar_type(), "poisson_cpu", [&] {
     CPUGeneratorImpl* generator = get_generator_or_default<CPUGeneratorImpl>(gen, detail::getDefaultCPUGenerator());
@@ -483,7 +476,7 @@ Tensor _s_gamma_cpu(const Tensor& alpha, std::optional<Generator> gen) {
   Tensor ret = at::zeros(alpha.sizes(), alpha.options());
   auto iter = TensorIteratorConfig()
     .add_output(ret)
-    .add_input(alpha)
+    .add_const_input(alpha)
     .build();
   AT_DISPATCH_FLOATING_TYPES(ret.scalar_type(), "gamma_cpu", [&] {
     CPUGeneratorImpl* generator = get_generator_or_default<CPUGeneratorImpl>(gen, detail::getDefaultCPUGenerator());
@@ -519,7 +512,7 @@ Tensor _s_dirichlet_cpu(const Tensor& alpha, std::optional<Generator> gen) {
     /* Generate gamma sample by casting alpha to double to prevent underflow. */
     auto iter1 = TensorIteratorConfig()
       .add_output(gamma)
-      .add_input(alpha)
+      .add_const_input(alpha)
       .check_all_same_dtype(false)
       .build();
     cpu_serial_kernel(iter1, [generator](scalar_t alpha_val) -> double{
@@ -542,8 +535,8 @@ Tensor _s_dirichlet_cpu(const Tensor& alpha, std::optional<Generator> gen) {
     Tensor gamma_sum = gamma.sum(-1, true).expand(alpha.sizes());
     auto iter2 = TensorIteratorConfig()
       .add_output(ret)
-      .add_input(gamma)
-      .add_input(gamma_sum)
+      .add_const_input(gamma)
+      .add_const_input(gamma_sum)
       .check_all_same_dtype(false)
       .build();
     cpu_serial_kernel(iter2, [](double gamma_val, double gamma_sum_val) -> scalar_t{
@@ -600,20 +593,16 @@ Tensor& multinomial_out(const Tensor& self,
   // https://github.com/pytorch/pytorch/issues/11931#issuecomment-625882503
   if (!with_replacement || n_sample == 1) {
     // Sanity checks on `self`.
-    auto is_valid = ((self.max() < INFINITY) & (self.min() >= 0)).item();
-    TORCH_CHECK(
-        is_valid.to<bool>(),
-        "probability tensor contains either `inf`, `nan` or element < 0");
-    // NOLINTNEXTLINE(cppcoreguidelines-init-variables)
-    bool zero_prob_condition;
+    auto [self_min, self_max] = self.aminmax();
+    auto is_valid = ((self_max < INFINITY) & (self_min >= 0));
+    at::_assert_async(is_valid, "probability tensor contains either `inf`, `nan` or element < 0");
+    at::Tensor zero_prob_condition;
     if (self.dim() == 1){
-      zero_prob_condition = (self.sum() == 0).item().to<bool>();
+      zero_prob_condition = (self.sum() == 0);
     } else {
-      zero_prob_condition = (self.sum(1) == 0).sum().item().to<bool>();
+      zero_prob_condition = (self.sum(1) == 0).any();
     }
-    TORCH_CHECK(
-        !zero_prob_condition,
-        "invalid multinomial distribution (sum of probabilities <= 0)");
+    at::_assert_async(~zero_prob_condition, "invalid multinomial distribution (sum of probabilities <= 0)");
 
     // The algorithm is from gumbel softmax.
     // s = argmax( logp - log(-log(eps)) ) where eps ~ U(0, 1)
