@@ -174,7 +174,7 @@ pillow==12.3.0
 #Pinned versions: 11.0.0
 #test that import:
 
-protobuf==6.33.5
+protobuf==7.35.1
 #Description:  Google's data interchange format
 #Pinned versions: 6.33.2
 #test that import: test_tensorboard.py, test/onnx/*
@@ -184,7 +184,7 @@ psutil
 #Pinned versions:
 #test that import: test_profiler.py, test_openmp.py, test_dataloader.py
 
-pytest==7.3.2
+pytest==9.0.3
 #Description: testing framework
 #Pinned versions:
 #test that import: test_typing.py, test_cpp_extensions_aot.py, run_test.py
@@ -346,7 +346,7 @@ sympy==1.13.3
 #Pinned versions:
 #test that import:
 
-onnx==1.21.0
+onnx==1.22.0
 #Description: Required by the torch.onnx exporter
 #Pinned versions:
 #test that import:
@@ -379,7 +379,7 @@ pwlf==2.2.1
 pip==26.1.2
 pyyaml==6.0.3
 pyzstd
-setuptools==78.1.1
+setuptools==83.0.0
 packaging==24.2
 six
 
@@ -401,7 +401,7 @@ cmake==3.31.6
 tlparse==0.4.0
 #Description: required for log parsing
 
-filelock==3.20.3
+filelock==3.32.3
 #Description: required for inductor testing
 
 cuda-bindings>=13.0,<14.0 ; platform_machine != "s390x" and platform_machine != "riscv64" and platform_system != "Darwin"
